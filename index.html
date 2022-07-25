@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+ <head>
+  <meta charset="utf-8">
+  <title>Летняя работа с MSE видео-потоком</title>
+ </head>
+ <body>
+  <div class="mse-video">
+    <div>
+      <video id="livestream" class="mse-video-size" autoplay controls muted/>
+    </div>
+    <div>
+    </div>
+  </div>
+  <script>
+    if (!Uint8Array.prototype.slice) {
+  Object.defineProperty(Uint8Array.prototype, 'slice', {
+    value: function(begin, end) {
+      return new Uint8Array(Array.prototype.slice.call(this, begin, end));
+    }
+  });
+}
+
+var streamingStarted = false;
+var ms = new MediaSource();
+var queue = [];
+var ws;
+var livestream = document.getElementById('livestream');
+
+var hidden;
+if (typeof document.hidden !== "undefined") {
+  hidden = "hidden";
+} else if (typeof document.msHidden !== "undefined") {
+  hidden = "msHidden";
+} else if (typeof document.webkitHidden !== "undefined") {
+  hidden = "webkitHidden";
+}
+
+function pushPacket(arr) {
+  var view = new Uint8Array(arr);
+  data = arr;
+  if (!streamingStarted) {
+    sourceBuffer.appendBuffer(data);
+    streamingStarted = true;
+    return;
+  }
+
+  queue.push(data);
+  if (!sourceBuffer.updating) {
+    loadPacket();
+  }
+}
+
+function loadPacket() {
+  if (!sourceBuffer.updating) {
+    if (queue.length > 0) {
+      inp = queue.shift();
+      var view = new Uint8Array(inp);
+      sourceBuffer.appendBuffer(inp);
+    } else {
+      streamingStarted = false;
+    }
+  }
+}
+
+function opened() {
+  ws = new WebSocket('ws://localhost:80/load');
+  ws.binaryType = "arraybuffer";
+  ws.onopen = function(event) {
+    console.log('Connect');
+  }
+  ws.onmessage = function(event) {
+    var data = new Uint8Array(event.data);
+    if (data[0] == 9) {
+      console.log('got meta!');
+      decoded_arr = data.slice(1);
+      if (window.TextDecoder) {
+        mimeCodec = new TextDecoder("utf-8").decode(decoded_arr);
+      } else {
+        mimeCodec = String.fromCharCode(decodedArr);
+      }
+      sourceBuffer = ms.addSourceBuffer('video/mp4; codecs="' + mimeCodec + '"');
+      sourceBuffer.mode = "segments"
+      sourceBuffer.addEventListener("updateend", loadPacket);  
+    } else {
+      pushPacket(event.data);
+    }
+    if (document[hidden] && livestream.buffered.length) {//fix pause on hidden tabs
+     livestream.currentTime = livestream.buffered.end((livestream.buffered.length - 1)) - 1;
+    }
+  };
+}
+
+function startup() {
+  ms.addEventListener('sourceopen', opened, false);
+  livestream.src = window.URL.createObjectURL(ms);
+}
+startup();
+   
+  </script>
+  <style>
+    .mse-video-size {
+        top: 0;
+        left: 0;
+        width: 720px;
+        height: 640px;
+        object-fit: cover;
+    }
+  </style>
+ </body>
+</html>
