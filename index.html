@@ -13,7 +13,7 @@
     </div>
   </div>
   <script>
-    if (!Uint8Array.prototype.slice) {
+  if (!Uint8Array.prototype.slice) { //если браузер не умеет работать с массивами 8-разрядных беззнаковых чисел - напомним
   Object.defineProperty(Uint8Array.prototype, 'slice', {
     value: function(begin, end) {
       return new Uint8Array(Array.prototype.slice.call(this, begin, end));
@@ -21,13 +21,13 @@
   });
 }
 
-var streamingStarted = false;
-var ms = new MediaSource();
-var queue = [];
-var ws;
-var livestream = document.getElementById('livestream');
+var streamingStarted = false; //маркер начала потока
+var ms = new MediaSource(); //заготовка для медиа-источника
+var queue = []; //очередь кадров для проигрывания
+var ws; //заготовка для веб-сокетного подключения
+var livestream = document.getElementById('livestream'); //livestream - объект с id 'livestream'
 
-var hidden;
+var hidden; //исправляем отсутствие некоторых компонентов в нашем HTML-объекте
 if (typeof document.hidden !== "undefined") {
   hidden = "hidden";
 } else if (typeof document.msHidden !== "undefined") {
@@ -36,56 +36,54 @@ if (typeof document.hidden !== "undefined") {
   hidden = "webkitHidden";
 }
 
-function pushPacket(arr) {
-  var view = new Uint8Array(arr);
+function pushPacket(arr) {  //добавляем пакет в буффер, если идёт передача 
   data = arr;
-  if (!streamingStarted) {
+  if (!streamingStarted) {  
     sourceBuffer.appendBuffer(data);
     streamingStarted = true;
     return;
   }
 
   queue.push(data);
-  if (!sourceBuffer.updating) {
+  if (!sourceBuffer.updating) { //если буфер никто не трогает - загружаем пакет из буфера в HTML-элемент
     loadPacket();
   }
 }
 
-function loadPacket() {
+function loadPacket() { //загружаем пакет из буфера в HTML-элемент
   if (!sourceBuffer.updating) {
-    if (queue.length > 0) {
+    if (queue.length > 0) { //если уже скопилась очередь
       inp = queue.shift();
-      var view = new Uint8Array(inp);
-      sourceBuffer.appendBuffer(inp);
+      sourceBuffer.appendBuffer(inp); //добавляем её содержимое в буфер
     } else {
-      streamingStarted = false;
+      streamingStarted = false; //очереди нет - передавать нечего
     }
   }
 }
 
-function opened() {
+function opened() { //инициируем веб-сокетное соединение и слушаем его
   ws = new WebSocket('ws://localhost:80/load');
   ws.binaryType = "arraybuffer";
   ws.onopen = function(event) {
     console.log('Connect');
   }
-  ws.onmessage = function(event) {
-    var data = new Uint8Array(event.data);
-    if (data[0] == 9) {
+  ws.onmessage = function(event) {  //если что-то пришло по веб-сокету
+    var data = new Uint8Array(event.data);  //преобразуем это "что-то" в массив беззнаковых восьмиразрядных чисел
+    if (data[0] == 9) { //если получили метаданные (пришёл первый пакет)
       console.log('got meta!');
-      decoded_arr = data.slice(1);
+      decoded_arr = data.slice(1);  //достаём информацию о кодеке из данных
       if (window.TextDecoder) {
         mimeCodec = new TextDecoder("utf-8").decode(decoded_arr);
       } else {
         mimeCodec = String.fromCharCode(decodedArr);
       }
-      sourceBuffer = ms.addSourceBuffer('video/mp4; codecs="' + mimeCodec + '"');
+      sourceBuffer = ms.addSourceBuffer('video/mp4; codecs="' + mimeCodec + '"'); //делаем буфер
       sourceBuffer.mode = "segments"
       sourceBuffer.addEventListener("updateend", loadPacket);  
-    } else {
-      pushPacket(event.data);
+    } else {  //если это не первый пакет
+      pushPacket(event.data); //пытаемся добавить его в буфер
     }
-    if (document[hidden] && livestream.buffered.length) {//fix pause on hidden tabs
+    if (document[hidden] && livestream.buffered.length) {//настраиваем полоску времени на показ длины буферизованного времени
      livestream.currentTime = livestream.buffered.end((livestream.buffered.length - 1)) - 1;
     }
   };
@@ -93,7 +91,7 @@ function opened() {
 
 function startup() {
   ms.addEventListener('sourceopen', opened, false);
-  livestream.src = window.URL.createObjectURL(ms);
+  livestream.src = window.URL.createObjectURL(ms); 
 }
 startup();
    
